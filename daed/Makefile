@@ -5,19 +5,13 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
-PKG_VERSION:=2025.12.07
-DAED_VERSION:=daed-f41f589
-WING_VERSION:=wing-6bb6a31
-CORE_VERSION:=core-7e67e31
-WING_HASH_SHORT:=$(shell echo $(WING_VERSION) | cut -d- -f2)
-CORE_HASH_SHORT:=$(shell echo $(CORE_VERSION) | cut -d- -f2)
+PKG_VERSION:=1.21.1
 PKG_RELEASE:=1
 
-PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_VERSION:=f41f5895446b272ff817988ae9d78cb041145884
 PKG_SOURCE_URL:=https://github.com/daeuniverse/daed.git
-PKG_MIRROR_HASH:=skip
+PKG_SOURCE_VERSION:=v$(PKG_VERSION)
+PKG_MIRROR_HASH:=7f636e76b8974d7b636ac1e8055ff3d10a3aa1642bb3222179a441685f6c2edf
 
 PKG_LICENSE:=AGPL-3.0-only MIT
 PKG_LICENSE_FILES:=LICENSE wing/LICENSE
@@ -30,20 +24,17 @@ PKG_BUILD_FLAGS:=no-mips16
 
 GO_PKG:=github.com/daeuniverse/dae-wing
 GO_PKG_LDFLAGS:= \
-	-s -w -X '$(GO_PKG)/db.AppDescription=$(PKG_NAME) is a integration solution of dae, API and UI.'
+	-X '$(GO_PKG)/db.AppDescription=$(PKG_NAME) is a integration solution of dae, API and UI.'
 GO_PKG_LDFLAGS_X= \
 	$(GO_PKG)/db.AppName=$(PKG_NAME) \
-	$(GO_PKG)/db.AppVersion=$(DAED_VERSION)_$(WING_VERSION)_$(CORE_VERSION)
+	$(GO_PKG)/db.AppVersion=$(PKG_VERSION)
 GO_PKG_TAGS:=embedallowed,trace
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/bpf.mk
 include $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk
 
-GO_PKG_TARGET_VARS+= \
-	CGO_LDFLAGS="$(TARGET_LDFLAGS) -static" \
-	GOEXPERIMENT=greenteagc
-GO_PKG_DEFAULT_LDFLAGS:=-w -s -linkmode external -extldflags '-static'
+TAR_CMD=$(HOST_TAR) -C $(BUILD_DIR)/ $(TAR_OPTIONS)
 
 define Package/daed/Default
   SECTION:=net
@@ -55,9 +46,24 @@ endef
 define Package/daed
   $(call Package/daed/Default)
   TITLE:=A Modern Dashboard For dae
+  # You need enable KERNEL_DEBUG_INFO_BTF and KERNEL_BPF_EVENTS
   DEPENDS:=$(GO_ARCH_DEPENDS) $(BPF_DEPENDS) \
     +ca-bundle +kmod-sched-core +kmod-sched-bpf +kmod-xdp-sockets-diag \
-    +kmod-veth +v2ray-geoip +v2ray-geosite
+    +kmod-veth
+endef
+
+define Package/daed-geoip
+  $(call Package/daed/Default)
+  TITLE:=geoip for daed
+  DEPENDS:=+daed +v2ray-geoip
+  PKGARCH:=all
+endef
+
+define Package/daed-geosite
+  $(call Package/daed/Default)
+  TITLE:=geosite for daed
+  DEPENDS:=+daed +v2ray-geosite
+  PKGARCH:=all
 endef
 
 define Package/daed/description
@@ -70,51 +76,28 @@ define Package/daed/conffiles
 /etc/config/daed
 endef
 
-NODE_VERSION:=v22.12.0
-NODE_DIST:=node-$(NODE_VERSION)-linux-x64
-NODE_URL:=https://nodejs.org/dist/$(NODE_VERSION)/$(NODE_DIST).tar.xz
-# NODE_DIST:=node-$(NODE_VERSION)-linux-x64-musl
-# NODE_URL:=https://unofficial-builds.nodejs.org/download/release/$(NODE_VERSION)/$(NODE_DIST).tar.xz
+WEB_FILE:=$(PKG_NAME)-web-$(PKG_VERSION).zip
+define Download/daed-web
+	URL:=https://github.com/daeuniverse/daed/releases/download/v$(PKG_VERSION)
+	URL_FILE:=web.zip
+	FILE:=$(WEB_FILE)
+	HASH:=ffba0f8b5e9411ad0da10349dfaab2336922d47cd5effd81163ce4415b4d84d7
+endef
 
 define Build/Prepare
+	$(call Build/Prepare/Default)
+
 	( \
-		$(TAR) --strip-components=1 -C $(PKG_BUILD_DIR)/../ -xzf $(DL_DIR)/$(PKG_NAME)-$(PKG_VERSION).tar.gz ; \
-		rm -rf $(PKG_BUILD_DIR) && git clone https://github.com/daeuniverse/dae-wing $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing && git -C $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing checkout $(WING_HASH_SHORT) ; \
-		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/daeuniverse/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout $(CORE_HASH_SHORT) ; \
-		pushd $(PKG_BUILD_DIR)/dae-core ; \
-		git submodule update --init ; \
-		go get -u=patch ; \
-		go mod tidy ; \
-		popd ; \
-		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
-		go mod tidy ; \
-		popd ; \
-		mkdir -p $(PKG_BUILD_DIR)/.node_tmp ; \
-		mkdir -p $(PKG_BUILD_DIR)/.home ; \
-		wget -qO - "$(NODE_URL)" | tar -xJ -C $(PKG_BUILD_DIR)/.node_tmp --strip-components=1 ; \
-		export PATH="$(PKG_BUILD_DIR)/.node_tmp/bin:$$$$PATH" ; \
-		export HOME="$(PKG_BUILD_DIR)/.home" ; \
-		export XDG_CONFIG_HOME="$(PKG_BUILD_DIR)/.home/.config" ; \
-		export XDG_CACHE_HOME="$(PKG_BUILD_DIR)/.home/.cache" ; \
-		npm install -g pnpm ; \
-		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \
-		pnpm config set engine-strict false ; \
-		pnpm config set store-dir $(PKG_BUILD_DIR)/.home/.pnpm-store ; \
-		pnpm install --shamefully-hoist --no-frozen-lockfile ; \
-		TURBO_TELEMETRY_DISABLED=1 pnpm build ; \
-		popd ; \
-		mkdir -p $(PKG_BUILD_DIR)/webrender/web ; \
-		cp -rf $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/apps/web/dist/* $(PKG_BUILD_DIR)/webrender/web ; \
+		mkdir -p $(PKG_BUILD_DIR)/webrender ; \
+		unzip -q -d $(PKG_BUILD_DIR)/webrender/ $(DL_DIR)/$(WEB_FILE) ; \
 		find $(PKG_BUILD_DIR)/webrender/web -type f -size +4k ! -name "*.gz" ! -name "*.woff"  ! -name "*.woff2" -exec sh -c '\
 			gzip -9 -k "{}"; \
-			if [ "$$$$(stat -c %s {})" -lt "$$$$(stat -c %s {}.gz)" ]; then \
-				rm {}.gz; \
+			if [ "$$$$(stat -c %s "{}")" -lt "$$$$(stat -c %s "{}.gz")" ]; then \
+				rm "{}.gz"; \
 			else \
-				rm {}; \
+				rm "{}"; \
 			fi' \
 		";" ; \
-		rm -rf $(PKG_BUILD_DIR)/.node_tmp ; \
-		rm -rf $(PKG_BUILD_DIR)/.home ; \
 	)
 endef
 
@@ -123,6 +106,10 @@ DAE_CFLAGS:= \
 	-DMAX_MATCH_SET_LEN=1024 \
 	-I$(BPF_HEADERS_DIR)/tools/lib \
 	-I$(BPF_HEADERS_DIR)/arch/$(BPF_KARCH)/include/asm/mach-generic
+
+ifneq ($(CONFIG_USE_MUSL),)
+  TARGET_CFLAGS += -D_LARGEFILE64_SOURCE
+endif
 
 define Build/Compile
 	( \
@@ -158,5 +145,18 @@ define Package/daed/install
 	$(INSTALL_BIN) $(CURDIR)/files/daed.init $(1)/etc/init.d/daed
 endef
 
+define Package/daed-geoip/install
+	$(INSTALL_DIR) $(1)/usr/share/daed
+	$(LN) ../v2ray/geoip.dat $(1)/usr/share/daed/geoip.dat
+endef
+
+define Package/daed-geosite/install
+	$(INSTALL_DIR) $(1)/usr/share/daed
+	$(LN) ../v2ray/geosite.dat $(1)/usr/share/daed/geosite.dat
+endef
+
+$(eval $(call Download,daed-web))
 $(eval $(call GoBinPackage,daed))
 $(eval $(call BuildPackage,daed))
+$(eval $(call BuildPackage,daed-geoip))
+$(eval $(call BuildPackage,daed-geosite))
