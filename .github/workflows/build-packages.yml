@@ -65,7 +65,6 @@ jobs:
           name: daed_${{ env.version }}
           allowUpdates: true
           tag: daed_${{ env.version }}
-          commit: master
           token: ${{secrets.GITHUB_TOKEN}}
           replacesArtifacts: true
           artifacts: "bin/packages/${{ matrix.arch }}/packages_ci/*.apk"
