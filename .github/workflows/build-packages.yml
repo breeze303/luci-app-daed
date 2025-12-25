@@ -14,7 +14,7 @@ jobs:
           - i386_pentium4
           - x86_64
         sdk:
-          - openwrt-24.10
+          - SNAPSHOT
 
     steps:
       - uses: actions/checkout@main
