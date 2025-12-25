@@ -57,7 +57,7 @@ jobs:
         uses: actions/upload-artifact@main
         with:
           name: ${{ matrix.arch }}
-          path: bin/packages/${{ matrix.arch }}/packages_ci/*.ipk
+          path: bin/packages/${{ matrix.arch }}/packages_ci/*.apk
 
       - name: Upload packages
         uses: ncipollo/release-action@v1
@@ -68,4 +68,4 @@ jobs:
           commit: master
           token: ${{secrets.GITHUB_TOKEN}}
           replacesArtifacts: true
-          artifacts: "bin/packages/${{ matrix.arch }}/packages_ci/*.ipk"
+          artifacts: "bin/packages/${{ matrix.arch }}/packages_ci/*.apk"
