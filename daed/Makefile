@@ -5,10 +5,10 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
-PKG_VERSION:=2026.02.27
+PKG_VERSION:=2026.02.20
 DAED_VERSION:=daed-f045ecd
 WING_VERSION:=wing-6bb6a31
-CORE_VERSION:=core-6c71a20
+CORE_VERSION:=core-030902f
 WING_HASH_SHORT:=$(shell echo $(WING_VERSION) | cut -d- -f2)
 CORE_HASH_SHORT:=$(shell echo $(CORE_VERSION) | cut -d- -f2)
 PKG_RELEASE:=1
@@ -34,7 +34,7 @@ GO_PKG_LDFLAGS:= \
 GO_PKG_LDFLAGS_X= \
 	$(GO_PKG)/db.AppName=$(PKG_NAME) \
 	$(GO_PKG)/db.AppVersion=$(DAED_VERSION)_$(WING_VERSION)_$(CORE_VERSION)
-GO_PKG_TAGS:=embedallowed,trace
+GO_PKG_TAGS:=embedallowed
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/bpf.mk
@@ -42,7 +42,10 @@ include $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk
 
 GO_PKG_TARGET_VARS+= \
 	CGO_LDFLAGS="$(TARGET_LDFLAGS) -static" \
-	GOEXPERIMENT=newinliner,simd
+	GOARCH=amd64 \
+	GOAMD64=v2 \
+	GOEXPERIMENT=newinliner \
+	GOFLAGS="-trimpath"
 GO_PKG_DEFAULT_LDFLAGS:=-w -s -linkmode external -extldflags '-static'
 
 define Package/daed/Default
@@ -80,23 +83,11 @@ define Build/Prepare
 	( \
 		$(TAR) --strip-components=1 -C $(PKG_BUILD_DIR)/../ -xzf $(DL_DIR)/$(PKG_NAME)-$(PKG_VERSION).tar.gz ; \
 		rm -rf $(PKG_BUILD_DIR) && git clone https://github.com/daeuniverse/dae-wing $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing && git -C $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing checkout $(WING_HASH_SHORT) ; \
-		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/olicesx/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout $(CORE_HASH_SHORT) ; \
+		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/daeuniverse/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout $(CORE_HASH_SHORT) ; \
 		pushd $(PKG_BUILD_DIR)/dae-core ; \
 		git submodule update --init ; \
-        go get -u=patch ; \
-		go mod tidy ; \
 		popd ; \
-        rm -rf $(PKG_BUILD_DIR)/../outbound ; \
-		git clone --depth=1 -b perf/complete-optimizations https://github.com/olicesx/outbound.git $(PKG_BUILD_DIR)/../outbound ; \
-		pushd $(PKG_BUILD_DIR) ; \
-		go mod edit -replace github.com/daeuniverse/outbound=../outbound ; \
-		rm -rf $(PKG_BUILD_DIR)/../quic-go ; \
-		git clone --depth=1 -b main https://github.com/olicesx/quic-go.git $(PKG_BUILD_DIR)/../quic-go ; \
-		pushd $(PKG_BUILD_DIR) ; \
-		go mod edit -replace github.com/daeuniverse/quic-go=../quic-go ; \
-		wget -qO - https://github.com/daeuniverse/dae-wing/commit/157668a.patch | patch -p1 -N || true ; \
-		go get -u=patch ; \
-		go mod tidy ; \
+		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
 		popd ; \
 		mkdir -p $(PKG_BUILD_DIR)/.node_tmp ; \
 		mkdir -p $(PKG_BUILD_DIR)/.node_tmp/config ; \
@@ -110,20 +101,15 @@ define Build/Prepare
 		popd ; \
 		mkdir -p $(PKG_BUILD_DIR)/webrender/web ; \
 		cp -rf $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/apps/web/dist/* $(PKG_BUILD_DIR)/webrender/web ; \
-		find $(PKG_BUILD_DIR)/webrender/web -type f -size +4k ! -name "*.gz" ! -name "*.woff"  ! -name "*.woff2" -exec sh -c '\
-			gzip -9 -k "{}"; \
-			if [ "$$$$(stat -c %s {})" -lt "$$$$(stat -c %s {}.gz)" ]; then \
-				rm {}.gz; \
-			else \
-				rm {}; \
-			fi' \
+		find $(PKG_BUILD_DIR)/webrender/web -type f -size +4k ! -name "*.gz" ! -name "*.woff" ! -name "*.woff2" -exec sh -c '\
+			gzip -9 -k "{}"' \
 		";" ; \
 		rm -rf $(PKG_BUILD_DIR)/.node_tmp ; \
 	)
 endef
 
 DAE_CFLAGS:= \
-	-O2 -Wall -Werror \
+	-O2 -g -mcpu=v4 -Wall -Werror \
 	-DMAX_MATCH_SET_LEN=1024 \
 	-I$(BPF_HEADERS_DIR)/tools/lib \
 	-I$(BPF_HEADERS_DIR)/arch/$(BPF_KARCH)/include/asm/mach-generic
