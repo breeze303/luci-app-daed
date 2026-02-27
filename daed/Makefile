@@ -8,6 +8,7 @@ PKG_NAME:=daed
 PKG_VERSION:=2026.02.27
 PKG_RELEASE:=1
 
+# 🌟 核心改动：直接使用你刚刚生成的 GitHub Release 链接
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=https://github.com/breeze303/daed-ci/releases/download/daed-source-latest/
 PKG_HASH:=skip
@@ -76,9 +77,8 @@ endef
 
 # N5000 eBPF 性能压榨参数
 DAE_CFLAGS:= \
-	-O2 -g -mcpu=v4 -Wall -Werror \
+	-O2 -g -mcpu=v3 -Wall -Werror \
 	-fno-stack-protector -fno-ident \
-	-DMAX_MATCH_SET_LEN=1024 \
 	-I$(BPF_HEADERS_DIR)/tools/lib \
 	-I$(BPF_HEADERS_DIR)/arch/$(BPF_KARCH)/include/asm/mach-generic
 
