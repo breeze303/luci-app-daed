@@ -5,24 +5,18 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
-PKG_VERSION:=2026.02.20
-DAED_VERSION:=daed-f045ecd
-WING_VERSION:=wing-6bb6a31
-CORE_VERSION:=core-030902f
-WING_HASH_SHORT:=$(shell echo $(WING_VERSION) | cut -d- -f2)
-CORE_HASH_SHORT:=$(shell echo $(CORE_VERSION) | cut -d- -f2)
+PKG_VERSION:=2026.02.27
 PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
-PKG_SOURCE_PROTO:=git
-PKG_SOURCE_VERSION:=f045ecdd76cecce4e887a123dd45a9c25260f773
-PKG_SOURCE_URL:=https://github.com/daeuniverse/daed.git
-PKG_MIRROR_HASH:=skip
+PKG_SOURCE_URL:=https://github.com/breeze303/daed-ci/releases/download/daed-source-latest/
+PKG_HASH:=skip
 
 PKG_LICENSE:=AGPL-3.0-only MIT
 PKG_LICENSE_FILES:=LICENSE wing/LICENSE
 PKG_MAINTAINER:=Tianling Shen <cnsztl@immortalwrt.org>
 
+# 指向解压后的 wing 目录作为主工程
 PKG_BUILD_DIR=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing
 PKG_BUILD_DEPENDS:=golang/host bpf-headers
 PKG_BUILD_PARALLEL:=1
@@ -33,13 +27,14 @@ GO_PKG_LDFLAGS:= \
 	-s -w -X '$(GO_PKG)/db.AppDescription=$(PKG_NAME) is a integration solution of dae, API and UI.'
 GO_PKG_LDFLAGS_X= \
 	$(GO_PKG)/db.AppName=$(PKG_NAME) \
-	$(GO_PKG)/db.AppVersion=$(DAED_VERSION)_$(WING_VERSION)_$(CORE_VERSION)
+	$(GO_PKG)/db.AppVersion=$(PKG_VERSION)_olicesx_perf
 GO_PKG_TAGS:=embedallowed
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/bpf.mk
 include $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk
 
+# N5000 专属交叉编译参数
 GO_PKG_TARGET_VARS+= \
 	CGO_LDFLAGS="$(TARGET_LDFLAGS) -static" \
 	GOARCH=amd64 \
@@ -57,7 +52,7 @@ endef
 
 define Package/daed
   $(call Package/daed/Default)
-  TITLE:=A Modern Dashboard For dae
+  TITLE:=A Modern Dashboard For dae (N5000 Optimized)
   DEPENDS:=$(GO_ARCH_DEPENDS) $(BPF_DEPENDS) \
     +ca-bundle +kmod-sched-core +kmod-sched-bpf +kmod-xdp-sockets-diag \
     +kmod-veth +v2ray-geoip +v2ray-geosite
@@ -73,64 +68,34 @@ define Package/daed/conffiles
 /etc/config/daed
 endef
 
-NODE_VERSION:=v24.12.0
-NODE_DIST:=node-$(NODE_VERSION)-linux-x64
-NODE_URL:=https://nodejs.org/dist/$(NODE_VERSION)/$(NODE_DIST).tar.xz
-# NODE_DIST:=node-$(NODE_VERSION)-linux-x64-musl
-# NODE_URL:=https://unofficial-builds.nodejs.org/download/release/$(NODE_VERSION)/$(NODE_DIST).tar.xz
-
+# 🌟 Prepare 阶段：只需解压，并暴力帮 OpenWrt 认路
 define Build/Prepare
-	( \
-		$(TAR) --strip-components=1 -C $(PKG_BUILD_DIR)/../ -xzf $(DL_DIR)/$(PKG_NAME)-$(PKG_VERSION).tar.gz ; \
-		rm -rf $(PKG_BUILD_DIR) && git clone https://github.com/daeuniverse/dae-wing $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing && git -C $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing checkout $(WING_HASH_SHORT) ; \
-		rm -rf $(PKG_BUILD_DIR)/dae-core && git clone https://github.com/daeuniverse/dae $(PKG_BUILD_DIR)/dae-core && git -C $(PKG_BUILD_DIR)/dae-core checkout $(CORE_HASH_SHORT) ; \
-		pushd $(PKG_BUILD_DIR)/dae-core ; \
-		git submodule update --init ; \
-		popd ; \
-		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
-		popd ; \
-		mkdir -p $(PKG_BUILD_DIR)/.node_tmp ; \
-		mkdir -p $(PKG_BUILD_DIR)/.node_tmp/config ; \
-		wget -qO - "$(NODE_URL)" | tar -xJ -C $(PKG_BUILD_DIR)/.node_tmp --strip-components=1 ; \
-		export PATH="$(PKG_BUILD_DIR)/.node_tmp/bin:$$$$PATH" ; \
-		export XDG_CONFIG_HOME="$(PKG_BUILD_DIR)/.node_tmp/config" ; \
-		npm install -g pnpm ; \
-		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION) ; \
-		pnpm install ; \
-		pnpm build --filter daed ; \
-		popd ; \
-		mkdir -p $(PKG_BUILD_DIR)/webrender/web ; \
-		cp -rf $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/apps/web/dist/* $(PKG_BUILD_DIR)/webrender/web ; \
-		find $(PKG_BUILD_DIR)/webrender/web -type f -size +4k ! -name "*.gz" ! -name "*.woff" ! -name "*.woff2" -exec sh -c '\
-			gzip -9 -k "{}"' \
-		";" ; \
-		rm -rf $(PKG_BUILD_DIR)/.node_tmp ; \
-	)
+	mkdir -p $(PKG_BUILD_DIR)/..
+	$(TAR) -C $(PKG_BUILD_DIR)/.. -xzf $(DL_DIR)/$(PKG_SOURCE)
 endef
 
+# N5000 eBPF 性能压榨参数
 DAE_CFLAGS:= \
 	-O2 -g -mcpu=v4 -Wall -Werror \
+	-fno-stack-protector -fno-ident \
 	-DMAX_MATCH_SET_LEN=1024 \
 	-I$(BPF_HEADERS_DIR)/tools/lib \
 	-I$(BPF_HEADERS_DIR)/arch/$(BPF_KARCH)/include/asm/mach-generic
 
 define Build/Compile
 	( \
+		set -e ; \
 		pushd $(PKG_BUILD_DIR) ; \
-		export \
-		$(GO_GENERAL_BUILD_CONFIG_VARS) \
-		$(GO_PKG_BUILD_CONFIG_VARS) \
-		$(GO_PKG_BUILD_VARS) ; \
-		go generate ./... ; \
-		cd dae-core ; \
-		export \
-		BPF_CLANG="$(CLANG)" \
-		BPF_STRIP_FLAG="-strip=$(LLVM_STRIP)" \
-		BPF_CFLAGS="$(DAE_CFLAGS)" \
-		BPF_TARGET="bpfel,bpfeb" \
-		BPF_TRACE_TARGET="$(GO_ARCH)" ; \
-		go generate control/control.go ; \
-		go generate trace/trace.go ; \
+		$(GO_PKG_VARS) go mod tidy ; \
+		$(GO_PKG_VARS) go generate ./... ; \
+		cd ../dae-core ; \
+		export BPF_CLANG="$(CLANG)" ; \
+		export BPF_STRIP_FLAG="-strip=$(LLVM_STRIP)" ; \
+		export BPF_CFLAGS="$(DAE_CFLAGS)" ; \
+		export BPF_TARGET="bpfel,bpfeb" ; \
+		export BPF_TRACE_TARGET="$(GO_ARCH)" ; \
+		$(GO_PKG_VARS) go generate ./control/control.go ; \
+		$(GO_PKG_VARS) go generate ./trace/trace.go ; \
 		popd ; \
 		$(call GoPackage/Build/Compile) ; \
 	)
