@@ -28,20 +28,16 @@ GO_PKG_LDFLAGS:= \
 	-s -w -X '$(GO_PKG)/db.AppDescription=$(PKG_NAME) is a integration solution of dae, API and UI.'
 GO_PKG_LDFLAGS_X= \
 	$(GO_PKG)/db.AppName=$(PKG_NAME) \
-	$(GO_PKG)/db.AppVersion=$(PKG_VERSION)_olicesx_perf
-GO_PKG_TAGS:=embedallowed
+	$(GO_PKG)/db.AppVersion=$(DAED_VERSION)_$(WING_VERSION)_$(CORE_VERSION)
+GO_PKG_TAGS:=embedallowed,trace
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/bpf.mk
 include $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk
 
-# N5000 专属交叉编译参数
 GO_PKG_TARGET_VARS+= \
 	CGO_LDFLAGS="$(TARGET_LDFLAGS) -static" \
-	GOARCH=amd64 \
-	GOAMD64=v2 \
-	GOEXPERIMENT=newinliner \
-	GOFLAGS="-trimpath"
+	GOEXPERIMENT=newinliner,simd
 GO_PKG_DEFAULT_LDFLAGS:=-w -s -linkmode external -extldflags '-static'
 
 define Package/daed/Default
@@ -53,7 +49,7 @@ endef
 
 define Package/daed
   $(call Package/daed/Default)
-  TITLE:=A Modern Dashboard For dae (N5000 Optimized)
+  TITLE:=A Modern Dashboard For dae
   DEPENDS:=$(GO_ARCH_DEPENDS) $(BPF_DEPENDS) \
     +ca-bundle +kmod-sched-core +kmod-sched-bpf +kmod-xdp-sockets-diag \
     +kmod-veth +v2ray-geoip +v2ray-geosite
@@ -69,16 +65,14 @@ define Package/daed/conffiles
 /etc/config/daed
 endef
 
-# 🌟 Prepare 阶段：只需解压，并暴力帮 OpenWrt 认路
 define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)/..
 	$(TAR) -C $(PKG_BUILD_DIR)/.. -xzf $(DL_DIR)/$(PKG_SOURCE)
 endef
 
-# N5000 eBPF 性能压榨参数
 DAE_CFLAGS:= \
-	-O2 -g -mcpu=v3 -Wall -Werror \
-	-fno-stack-protector -fno-ident \
+	-O2 -Wall -Werror \
+	-DMAX_MATCH_SET_LEN=1024 \
 	-I$(BPF_HEADERS_DIR)/tools/lib \
 	-I$(BPF_HEADERS_DIR)/arch/$(BPF_KARCH)/include/asm/mach-generic
 
