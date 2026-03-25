@@ -17,7 +17,6 @@ PKG_LICENSE:=AGPL-3.0-only MIT
 PKG_LICENSE_FILES:=LICENSE wing/LICENSE
 PKG_MAINTAINER:=Tianling Shen <cnsztl@immortalwrt.org>
 
-# 解压后的主工程目录
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing
 PKG_BUILD_DEPENDS:=golang/host bpf-headers
 PKG_BUILD_PARALLEL:=1
@@ -81,16 +80,16 @@ DAE_CFLAGS:= \
 define Build/Compile
 	( \
 		set -e; \
-		host_goos="$$(go env GOHOSTOS)"; \
-		host_goarch="$$(go env GOHOSTARCH)"; \
+		host_goos="$$$$($(GO_PKG_VARS) go env GOHOSTOS)"; \
+		host_goarch="$$$$($(GO_PKG_VARS) go env GOHOSTARCH)"; \
 		host_go_generate() { \
 			$(GO_PKG_VARS) \
-			GOOS="$$host_goos" GOARCH="$$host_goarch" \
+			GOOS="$$$$host_goos" GOARCH="$$$$host_goarch" \
 			GO386= GOAMD64= GOARM= GOARM64= GOMIPS= GOMIPS64= GOPPC64= \
 			CGO_ENABLED=0 \
 			CC= CXX= \
 			CGO_CFLAGS= CGO_CPPFLAGS= CGO_CXXFLAGS= CGO_LDFLAGS= \
-			go generate "$$@"; \
+			go generate "$$$$@"; \
 		}; \
 		cd $(PKG_BUILD_DIR); \
 		host_go_generate ./...; \
