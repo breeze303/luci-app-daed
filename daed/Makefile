@@ -81,13 +81,8 @@ DAE_CFLAGS:= \
 define Build/Compile
 	( \
 		set -e; \
-		case "$$(uname -m)" in \
-			x86_64) host_goarch=amd64 ;; \
-			aarch64|arm64) host_goarch=arm64 ;; \
-			i?86) host_goarch=386 ;; \
-			*) echo "Unsupported host arch: $$(uname -m)" >&2; exit 1 ;; \
-		esac; \
-		host_goos="$$(uname -s | tr '[:upper:]' '[:lower:]')"; \
+		host_goos="$$(go env GOHOSTOS)"; \
+		host_goarch="$$(go env GOHOSTARCH)"; \
 		host_go_generate() { \
 			$(GO_PKG_VARS) \
 			GOOS="$$host_goos" GOARCH="$$host_goarch" \
