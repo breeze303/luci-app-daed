@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - ci
+      - main
 
 permissions:
   contents: write
@@ -27,11 +27,10 @@ jobs:
         id: meta
         shell: bash
         run: |
-          latest_commit=$(grep "DAED_VERSION:=daed-" daed/Makefile | sed 's/.*daed-//' | head -n 1)
-          latest_wing_commit=$(grep "WING_VERSION:=wing-" daed/Makefile | sed 's/.*wing-//' | head -n 1)
-          latest_core_commit=$(grep "CORE_VERSION:=core-" daed/Makefile | sed 's/.*core-//' | head -n 1)
+          pkg_version=$(grep '^PKG_VERSION:=' daed/Makefile | head -n 1 | cut -d= -f2)
+          pkg_release=$(grep '^PKG_RELEASE:=' daed/Makefile | head -n 1 | cut -d= -f2)
 
-          version="${latest_commit}-wing_${latest_wing_commit}-core_${latest_core_commit}"
+          version="${pkg_version}-r${pkg_release}"
           release_tag="daed_${version}"
           release_name="daed_${version}"
 
@@ -59,7 +58,6 @@ jobs:
           - arch: x86_64
             sdk: openwrt-24.10
             pkg_ext: ipk
-
           - arch: aarch64_generic
             sdk: openwrt-25.12
             pkg_ext: apk
@@ -121,11 +119,24 @@ jobs:
           fi
           printf '%s\n' "${files[@]}"
 
+      - name: Prepare renamed artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for f in bin/packages/${{ matrix.arch }}/packages_ci/*.${{ matrix.pkg_ext }}; do
+            base="$(basename "$f")"
+            ext="${base##*.}"
+            name="${base%.*}"
+            cp "$f" "dist/${name}-${{ matrix.arch }}-${{ matrix.sdk }}.${ext}"
+          done
+          ls -lah dist
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.arch }}-${{ matrix.sdk }}-${{ matrix.pkg_ext }}
-          path: bin/packages/${{ matrix.arch }}/packages_ci/*.${{ matrix.pkg_ext }}
+          path: dist/*.${{ matrix.pkg_ext }}
           if-no-files-found: error
           retention-days: 7
 
