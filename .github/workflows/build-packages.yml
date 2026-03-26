@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - fix
+      - kix
 
 permissions:
   contents: write
@@ -49,9 +49,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - arch: aarch64_generic
+            sdk: openwrt-24.10
+            pkg_ext: ipk
+          - arch: i386_pentium4
+            sdk: openwrt-24.10
+            pkg_ext: ipk
           - arch: x86_64
             sdk: openwrt-24.10
             pkg_ext: ipk
+          - arch: aarch64_generic
+            sdk: openwrt-25.12
+            pkg_ext: apk
+          - arch: i386_pentium4
+            sdk: openwrt-25.12
+            pkg_ext: apk
           - arch: x86_64
             sdk: openwrt-25.12
             pkg_ext: apk
@@ -107,11 +119,24 @@ jobs:
           fi
           printf '%s\n' "${files[@]}"
 
+      - name: Prepare renamed artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for f in bin/packages/${{ matrix.arch }}/packages_ci/*.${{ matrix.pkg_ext }}; do
+            base="$(basename "$f")"
+            ext="${base##*.}"
+            name="${base%.*}"
+            cp "$f" "dist/${name}-${{ matrix.arch }}-${{ matrix.sdk }}.${ext}"
+          done
+          ls -lah dist
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.arch }}-${{ matrix.sdk }}-${{ matrix.pkg_ext }}
-          path: bin/packages/${{ matrix.arch }}/packages_ci/*.${{ matrix.pkg_ext }}
+          path: dist/*.${{ matrix.pkg_ext }}
           if-no-files-found: error
           retention-days: 7
 
