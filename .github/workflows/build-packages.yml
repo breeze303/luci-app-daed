@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - kix
+      - n5000
 
 permissions:
   contents: write
@@ -31,8 +31,8 @@ jobs:
           pkg_release=$(grep '^PKG_RELEASE:=' daed/Makefile | head -n 1 | cut -d= -f2)
 
           version="${pkg_version}-r${pkg_release}"
-          release_tag="daed_${version}"
-          release_name="daed_${version}"
+          release_tag="n5000_daed_${version}"
+          release_name="n5000_daed_${version}"
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
