@@ -3,10 +3,70 @@ name: Build Web
 on:
   workflow_dispatch:
   schedule:
-    - cron: 0 16 * * *
+    - cron: '0 */4 * * *'
 
 jobs:
+  check_update:
+    runs-on: ubuntu-latest
+    outputs:
+      updated: ${{ steps.check.outputs.updated }}
+      pkg_version: ${{ steps.check.outputs.pkg_version }}
+      latest_commit: ${{ steps.check.outputs.latest_commit }}
+      latest_wing_commit: ${{ steps.check.outputs.latest_wing_commit }}
+      latest_core_commit: ${{ steps.check.outputs.latest_core_commit }}
+      latest_commit_full: ${{ steps.check.outputs.latest_commit_full }}
+      formatted_timestamp: ${{ steps.check.outputs.formatted_timestamp }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check Upstream Commits
+        id: check
+        run: |
+          current_commit_full=$(grep 'PKG_SOURCE_VERSION:=' ./daed/Makefile | cut -d '=' -f 2 || echo "none")
+          current_wing=$(grep 'WING_VERSION:=' ./daed/Makefile | cut -d '-' -f 2 || echo "none")
+          current_core=$(grep 'CORE_VERSION:=' ./daed/Makefile | cut -d '-' -f 2 || echo "none")
+
+          res_daed=$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main)
+          res_wing=$(curl -s https://api.github.com/repos/daeuniverse/dae-wing/commits/main)
+          res_core=$(curl -s https://api.github.com/repos/daeuniverse/dae/commits/main)
+
+          latest_commit_full=$(echo "$res_daed" | jq -r '.sha')
+          latest_commit=$(echo "$latest_commit_full" | cut -b 1-7)
+          latest_wing_commit=$(echo "$res_wing" | jq -r '.sha' | cut -b 1-7)
+          latest_core_commit=$(echo "$res_core" | jq -r '.sha' | cut -b 1-7)
+
+          if [ "$current_commit_full" = "$latest_commit_full" ] && \
+             [ "$current_wing" = "$latest_wing_commit" ] && \
+             [ "$current_core" = "$latest_core_commit" ]; then
+            echo "All upstream repos are up-to-date."
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Upstream has new commits. Triggering build..."
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+
+            date_daed_iso=$(echo "$res_daed" | jq -r '.commit.committer.date')
+            date_wing_iso=$(echo "$res_wing" | jq -r '.commit.committer.date')
+            date_core_iso=$(echo "$res_core" | jq -r '.commit.committer.date')
+            
+            latest_iso_date=$(echo -e "$date_daed_iso\n$date_wing_iso\n$date_core_iso" | sort -r | head -n 1)
+            pkg_version=$(date -d "$latest_iso_date" +%Y.%m.%d)
+            
+            timestamp=$(echo "$res_daed" | jq -r '.commit.author.date')
+            formatted_timestamp=$(date --date="$timestamp" "+%Y-%m-%d")
+
+            echo "pkg_version=$pkg_version" >> "$GITHUB_OUTPUT"
+            echo "latest_commit=$latest_commit" >> "$GITHUB_OUTPUT"
+            echo "latest_wing_commit=$latest_wing_commit" >> "$GITHUB_OUTPUT"
+            echo "latest_core_commit=$latest_core_commit" >> "$GITHUB_OUTPUT"
+            echo "latest_commit_full=$latest_commit_full" >> "$GITHUB_OUTPUT"
+            echo "formatted_timestamp=$formatted_timestamp" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: check_update
+    if: needs.check_update.outputs.updated == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,12 +83,17 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y squashfs-tools jq
-          sudo apt-get install -y dos2unix
+          sudo apt-get install -y squashfs-tools jq dos2unix
           sudo npm install -g pnpm
           sudo npm i taze -g
 
       - name: Update Makefile
+        env:
+          PKG_VER: ${{ needs.check_update.outputs.pkg_version }}
+          DAED_COMMIT: ${{ needs.check_update.outputs.latest_commit }}
+          WING_COMMIT: ${{ needs.check_update.outputs.latest_wing_commit }}
+          CORE_COMMIT: ${{ needs.check_update.outputs.latest_core_commit }}
+          DAED_FULL: ${{ needs.check_update.outputs.latest_commit_full }}
         run: |
           chmod 755 ./daed/files/daed.init ./luci-app-daed/root/etc/init.d/luci_daed ./luci-app-daed/root/etc/hotplug.d/iface/98-daed
           find . -type f -exec dos2unix {} \; -print
@@ -36,40 +101,20 @@ jobs:
           dos2unix ./luci-app-daed/root/etc/init.d/luci_daed
           dos2unix ./luci-app-daed/root/etc/hotplug.d/iface/98-daed
 
-          date_daed_iso=$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.commit.committer.date')
-          date_wing_iso=$(curl -s https://api.github.com/repos/daeuniverse/dae-wing/commits/main | jq -r '.commit.committer.date')
-          date_core_iso=$(curl -s https://api.github.com/repos/daeuniverse/dae/commits/main | jq -r '.commit.committer.date')
-
-          latest_iso_date=$(echo -e "$date_daed_iso\n$date_wing_iso\n$date_core_iso" | sort -r | head -n 1)
-
-          pkg_version=$(date -d "$latest_iso_date" +%Y.%m.%d)
-          
-          echo "Selected latest date: $latest_iso_date formatted as $pkg_version"
-
-          latest_commit="$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha' | cut -b 1-7)"
-          latest_wing_commit="$(curl -s https://api.github.com/repos/daeuniverse/dae-wing/commits/main | jq -r '.sha' | cut -b 1-7)"
-          latest_core_commit="$(curl -s https://api.github.com/repos/daeuniverse/dae/commits/main | jq -r '.sha' | cut -b 1-7)"
-          
-          latest_commit_full="$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.sha')"
-          timestamp=$(curl -s https://api.github.com/repos/daeuniverse/daed/commits/main | jq -r '.commit.author.date')
-          formatted_timestamp=$(date --date="$timestamp" "+%Y-%m-%d")
-          
           sed -i '/PKG_VERSION:/d' ./daed/Makefile
-          sed -i "7 a PKG_VERSION:=$pkg_version" ./daed/Makefile
+          sed -i "7 a PKG_VERSION:=$PKG_VER" ./daed/Makefile
           
           sed -i '/DAED_VERSION:/d' ./daed/Makefile
-          sed -i "8 a DAED_VERSION:=daed-$latest_commit" ./daed/Makefile
+          sed -i "8 a DAED_VERSION:=daed-$DAED_COMMIT" ./daed/Makefile
           
           sed -i '/WING_VERSION:=/d' ./daed/Makefile
-          sed -i "9 a WING_VERSION:=wing-$latest_wing_commit" ./daed/Makefile
+          sed -i "9 a WING_VERSION:=wing-$WING_COMMIT" ./daed/Makefile
           
           sed -i '/CORE_VERSION:=/d' ./daed/Makefile
-          sed -i "10 a CORE_VERSION:=core-$latest_core_commit" ./daed/Makefile
+          sed -i "10 a CORE_VERSION:=core-$CORE_COMMIT" ./daed/Makefile
           
           sed -i '/PKG_SOURCE_VERSION:/d' ./daed/Makefile
-          sed -i "17 a PKG_SOURCE_VERSION:=$latest_commit_full" ./daed/Makefile
-          
-          echo "version=$formatted_timestamp-$latest_commit" >> "$GITHUB_ENV"
+          sed -i "17 a PKG_SOURCE_VERSION:=$DAED_FULL" ./daed/Makefile
 
       - name: Commit file
         run: |
@@ -77,7 +122,7 @@ jobs:
           git config --global user.email simonsqiu@foxmail.com
           git config --global user.name SimonsQiu
           git add .
-          git commit -m "Update `date +%Y/%m/%d\ %H:%M:%S\ %Z`" -a
+          git commit -m "Update $(date +%Y/%m/%d\ %H:%M:%S\ %Z)" -a
         continue-on-error: true
 
       - name: Push changes
@@ -109,12 +154,4 @@ jobs:
         with:
           age: '3 days'
           skip-recent: 3
-        continue-on-error: true
-
-      - name: Cleanup Workflow Logs
-        uses: Mattraks/delete-workflow-runs@main
-        with:
-          token: ${{secrets.ACTIONS_DEPLOY_KEY}}
-          repository: ${{ github.repository }}
-          retain_days: 3
         continue-on-error: true
