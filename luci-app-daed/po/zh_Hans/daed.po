@@ -10,6 +10,12 @@ msgstr "DAE是一个基于eBPF的Linux高性能透明代理解决方案,而DAED�
 msgid "Base Setting"
 msgstr "基本设置"
 
+msgid "Global Settings"
+msgstr "全局设置"
+
+msgid "Enable"
+msgstr "启用"
+
 msgid "Dashboard"
 msgstr "仪表板"
 
@@ -18,6 +24,15 @@ msgstr "日志"
 
 msgid "Clear logs"
 msgstr "清空日志"
+
+msgid "Refresh logs"
+msgstr "刷新日志"
+
+msgid "Disable auto refresh"
+msgstr "关闭自动刷新"
+
+msgid "Enable auto refresh"
+msgstr "开启自动刷新"
 
 msgid "RUNNING"
 msgstr "运行中"
