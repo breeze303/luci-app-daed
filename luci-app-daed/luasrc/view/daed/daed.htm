@@ -1,8 +1,8 @@
 <%+header%>
 <%
-	local running = luci.sys.exec("pgrep -x /usr/bin/daed")
+	local running = luci.sys.call("pidof daed >/dev/null") == 0
 %>
-<% if tonumber(running) ~= nil then %>
+<% if running then %>
 	<div class="cbi-map">
 		<iframe id="daed" class="daed-iframe"></iframe>
 	</div>

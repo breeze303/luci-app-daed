@@ -1,10 +1,13 @@
 local sys  = require "luci.sys"
 local http = require "luci.http"
+local fs   = require "nixio.fs"
+
+local LOG = "/var/log/daed/daed.log"
 
 module("luci.controller.daed", package.seeall)
 
 function index()
-	if not nixio.fs.access("/etc/config/daed") then
+	if not fs.access("/etc/config/daed") then
 		return
 	end
 
@@ -26,9 +29,15 @@ function act_status()
 end
 
 function get_log()
-	http.write(sys.exec("cat /var/log/daed/daed.log"))
+	http.prepare_content("text/plain")
+	http.write(fs.readfile(LOG) or "")
 end
 
 function clear_log()
-	sys.call("true > /var/log/daed/daed.log")
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		http.status(405, "Method Not Allowed")
+		return
+	end
+
+	fs.writefile(LOG, "")
 end

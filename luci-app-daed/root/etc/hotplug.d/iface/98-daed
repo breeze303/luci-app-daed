@@ -2,21 +2,22 @@
 
 [ "${ACTION}" = "ifup" ] || exit 0
 
-DEVICE=$(logread | grep "link is up" | tail -n 1 | awk -F "'" '{print $2}')
-DEVICE_TYPE=$(ip link show dev "$DEVICE")
+DEVICE_NAME="${DEVICE:-$(logread | grep "link is up" | tail -n 1 | awk -F "'" '{print $2}')}"
+[ -n "$DEVICE_NAME" ] || exit 0
+
+DEVICE_TYPE=$(ip link show dev "$DEVICE_NAME" 2>/dev/null) || exit 0
 
 case "$DEVICE_TYPE" in
-  *"link/ether"*)
-    (
-      LOCK_FILE="/tmp/lock/daed_hotplug_lock"
-      if [ -f "$LOCK_FILE" ]; then
-        exit 1
-      else
-        echo $$ > "$LOCK_FILE" 2>/dev/null
-        trap 'rm -f "$LOCK_FILE"' EXIT
-        sleep 60
-        /etc/init.d/daed restart 2>&1
-      fi
-    ) &
-    ;;
+	*"link/ether"*)
+		(
+			LOCK_FILE="/tmp/lock/daed_hotplug_lock"
+			mkdir -p /tmp/lock
+			if ! mkdir "$LOCK_FILE" 2>/dev/null; then
+				exit 0
+			fi
+			trap 'rmdir "$LOCK_FILE"' EXIT
+			sleep 60
+			/etc/init.d/daed restart 2>&1
+		) &
+		;;
 esac
