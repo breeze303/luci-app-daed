@@ -31,7 +31,6 @@ PKG_BUILD_FLAGS:=no-mips16
 GO_PKG:=github.com/daeuniverse/dae-wing
 DAE_SOURCE_URL:=https://github.com/breeze303/dae.git
 WING_SOURCE_URL:=https://github.com/breeze303/dae-wing.git
-DAE_FORK:=github.com/breeze303/dae@v0.0.0-20260531045637-61d0426631bf
 OUTBOUND_FORK:=github.com/breeze303/outbound@v0.0.0-20260531045343-80f8be47bfab
 GO_PKG_LDFLAGS:= \
 	-s -w -X '$(GO_PKG)/db.AppDescription=$(PKG_NAME) is a integration solution of dae, API and UI.'
@@ -92,7 +91,7 @@ define Build/Prepare
 		go mod tidy ; \
 		popd ; \
 		pushd $(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)/wing ; \
-		go mod edit -replace=github.com/daeuniverse/dae=$(DAE_FORK) ; \
+		go mod edit -replace=github.com/daeuniverse/dae=./dae-core ; \
 		go mod edit -replace=github.com/daeuniverse/outbound=$(OUTBOUND_FORK) ; \
 		go mod tidy ; \
 		popd ; \
